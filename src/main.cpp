@@ -101,6 +101,67 @@ void loadShaders(WindowContext& windowContext) {
     glUseProgram(windowContext.gl.program);
 }
 
+void loadMesh(WindowContext &windowContext, tinygltf::Model& model, unsigned int meshId)
+{
+    GLuint vertexBuffer = 0;
+    GLuint normalBuffer = 0;
+    GLuint texCoordBuffer = 0;
+
+    uint32_t gltfAccessorPositionIndex = model.meshes[meshId].primitives[0].attributes["POSITION"];
+    uint32_t gltfAccessorNormalIndex = model.meshes[meshId].primitives[0].attributes["NORMAL"];
+    uint32_t gltfAccessorTexCoordIndex = model.meshes[meshId].primitives[0].attributes["TEXCOORD_0"];
+
+    uint32_t gltfBufferViewPositionIndex = model.accessors[gltfAccessorPositionIndex].bufferView;
+    uint32_t gltfBufferViewNormalIndex = model.accessors[gltfAccessorNormalIndex].bufferView;
+    uint32_t gltfBufferViewTexCoordIndex = model.accessors[gltfAccessorTexCoordIndex].bufferView;
+
+    uint32_t gltfBufferIndexPosition = model.bufferViews[gltfBufferViewPositionIndex].buffer;
+    uint32_t gltfBufferIndexNormal = model.bufferViews[gltfBufferViewNormalIndex].buffer;
+    uint32_t gltfBufferIndexTexCoord = model.bufferViews[gltfBufferViewTexCoordIndex].buffer;
+
+    unsigned char* gltfBufferDataPosition = model.buffers[gltfBufferIndexPosition].data.data();
+    unsigned char* gltfBufferDataNormal = model.buffers[gltfBufferIndexNormal].data.data();
+    unsigned char* gltfBufferDataTexCoord = model.buffers[gltfBufferIndexTexCoord].data.data();
+
+    uint32_t gltfPositionByteOffset = model.bufferViews[gltfBufferViewPositionIndex].byteOffset;
+    uint32_t gltfNormalByteOffset = model.bufferViews[gltfBufferViewNormalIndex].byteOffset;
+    uint32_t gltfTexCoordByteOffset = model.bufferViews[gltfBufferViewTexCoordIndex].byteOffset;
+
+    uint32_t gltfPositionByteLength = model.bufferViews[gltfBufferViewPositionIndex].byteLength;
+    uint32_t gltfNormalByteLength = model.bufferViews[gltfBufferViewNormalIndex].byteLength;
+    uint32_t gltfTexCoordByteLength = model.bufferViews[gltfBufferViewTexCoordIndex].byteLength;
+
+    glGenBuffers(1, &vertexBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, gltfPositionByteLength, gltfBufferDataPosition + gltfPositionByteOffset, GL_STATIC_DRAW);
+
+    glGenBuffers(1, &normalBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
+    glBufferData(GL_ARRAY_BUFFER, gltfNormalByteLength, gltfBufferDataNormal + gltfNormalByteOffset, GL_STATIC_DRAW);
+
+    glGenBuffers(1, &texCoordBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
+    glBufferData(GL_ARRAY_BUFFER, gltfTexCoordByteLength, gltfBufferDataTexCoord + gltfTexCoordByteOffset, GL_STATIC_DRAW);
+
+    glGenVertexArrays(1, &windowContext.gl.vertexArrayObject);
+    glBindVertexArray(windowContext.gl.vertexArrayObject);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
 
 int main(void)
 {
@@ -141,6 +202,10 @@ int main(void)
         std::cerr << "Warning: " << warn << std::endl;
         return 1;
     }
+
+
+        unsigned int meshId = 0;
+        loadMesh(windowContext, model, meshId);
 
 
 
@@ -195,25 +260,25 @@ int main(void)
     // }
 
 
-    // ============== SUZDAVANE NA TRI BUFERA ===================
-    unsigned int bufferID = 0;
-    unsigned int buffer2ID = 0;
-    unsigned int buffer3ID = 0;
-    glGenBuffers(1, &bufferID); //suzdavame bufer v GPU
-    glBindBuffer(GL_ARRAY_BUFFER, bufferID);    //definirame tipa na bufera
-    glBufferData(GL_ARRAY_BUFFER, sizeof(postitionData), postitionData, GL_STATIC_DRAW);
+    // // ============== SUZDAVANE NA TRI BUFERA ===================
+    // unsigned int bufferID = 0;
+    // unsigned int buffer2ID = 0;
+    // unsigned int buffer3ID = 0;
+    // glGenBuffers(1, &bufferID); //suzdavame bufer v GPU
+    // glBindBuffer(GL_ARRAY_BUFFER, bufferID);    //definirame tipa na bufera
+    // glBufferData(GL_ARRAY_BUFFER, sizeof(postitionData), postitionData, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &buffer2ID); //suzdavame bufer v GPU; kolko bufera, promenliva za da se populni id-to
-    glBindBuffer(GL_ARRAY_BUFFER, buffer2ID);    //definirame tipa na bufera
-    glBufferData(GL_ARRAY_BUFFER, sizeof(normalData), normalData, GL_STATIC_DRAW);
+    // glGenBuffers(1, &buffer2ID); //suzdavame bufer v GPU; kolko bufera, promenliva za da se populni id-to
+    // glBindBuffer(GL_ARRAY_BUFFER, buffer2ID);    //definirame tipa na bufera
+    // glBufferData(GL_ARRAY_BUFFER, sizeof(normalData), normalData, GL_STATIC_DRAW);
     
-    glGenBuffers(1, &buffer3ID); //suzdavame bufer v GPU
-    glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);    //definirame tipa na bufera
-    glBufferData(GL_ARRAY_BUFFER, sizeof(textData), textData, GL_STATIC_DRAW);
+    // glGenBuffers(1, &buffer3ID); //suzdavame bufer v GPU
+    // glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);    //definirame tipa na bufera
+    // glBufferData(GL_ARRAY_BUFFER, sizeof(textData), textData, GL_STATIC_DRAW);
 
-    const int POSITION_INDEX = 0;
-    const int NORMAL_INDEX = 1;
-    const int TEXT_INDEX = 2;  
+    // const int POSITION_INDEX = 0;
+    // const int NORMAL_INDEX = 1;
+    // const int TEXT_INDEX = 2;  
     
 
 
@@ -245,37 +310,37 @@ int main(void)
 
 
     // ========= IZPOLZVANE NA VERTEX ARRAY OBJECT ==========
-    GLuint vertexArrayObject1 = 0;
-    glGenVertexArrays(1, &vertexArrayObject1);
-    glBindVertexArray(vertexArrayObject1);
+    // GLuint vertexArrayObject1 = 0;
+    // glGenVertexArrays(1, &vertexArrayObject1);
+    // glBindVertexArray(vertexArrayObject1);
 
-    glBindBuffer(GL_ARRAY_BUFFER, bufferID); 
-    glEnableVertexAttribArray(POSITION_INDEX);
-    glVertexAttribPointer(POSITION_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0); 
+    // glBindBuffer(GL_ARRAY_BUFFER, bufferID); 
+    // glEnableVertexAttribArray(POSITION_INDEX);
+    // glVertexAttribPointer(POSITION_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0); 
     
-    glBindBuffer(GL_ARRAY_BUFFER, buffer2ID);
-    glEnableVertexAttribArray(NORMAL_INDEX);
-    glVertexAttribPointer(NORMAL_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    // glBindBuffer(GL_ARRAY_BUFFER, buffer2ID);
+    // glEnableVertexAttribArray(NORMAL_INDEX);
+    // glVertexAttribPointer(NORMAL_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0);
     
-    glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);
-    glEnableVertexAttribArray(TEXT_INDEX);  
-    glVertexAttribPointer(TEXT_INDEX, 2, GL_FLOAT, GL_FALSE,  0, 0);
+    // glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);
+    // glEnableVertexAttribArray(TEXT_INDEX);  
+    // glVertexAttribPointer(TEXT_INDEX, 2, GL_FLOAT, GL_FALSE,  0, 0);
 
-    GLuint vertexArrayObject2 = 0;
-    glGenVertexArrays(1, &vertexArrayObject2);
-    glBindVertexArray(vertexArrayObject2);
+    // GLuint vertexArrayObject2 = 0;
+    // glGenVertexArrays(1, &vertexArrayObject2);
+    // glBindVertexArray(vertexArrayObject2);
 
-    glBindBuffer(GL_ARRAY_BUFFER, bufferID);    
-    glEnableVertexAttribArray(TEXT_INDEX);
-    glVertexAttribPointer(TEXT_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0); 
+    // glBindBuffer(GL_ARRAY_BUFFER, bufferID);    
+    // glEnableVertexAttribArray(TEXT_INDEX);
+    // glVertexAttribPointer(TEXT_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0); 
     
-    glBindBuffer(GL_ARRAY_BUFFER, buffer2ID);    
-    glEnableVertexAttribArray(NORMAL_INDEX);
-    glVertexAttribPointer(NORMAL_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    // glBindBuffer(GL_ARRAY_BUFFER, buffer2ID);    
+    // glEnableVertexAttribArray(NORMAL_INDEX);
+    // glVertexAttribPointer(NORMAL_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0);
     
-    glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);    
-    glEnableVertexAttribArray(POSITION_INDEX);  
-    glVertexAttribPointer(POSITION_INDEX, 2, GL_FLOAT, GL_FALSE,  0, 0);
+    // glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);    
+    // glEnableVertexAttribArray(POSITION_INDEX);  
+    // glVertexAttribPointer(POSITION_INDEX, 2, GL_FLOAT, GL_FALSE,  0, 0);
 
     loadShaders(windowContext);
 
@@ -290,12 +355,12 @@ int main(void)
         // glVertex2d(0.5f, 0.0f);
         // glVertex2d(0.0f, 0.5f);
         // glVertex2d(0.0f, -0.5f);
-        glBindVertexArray(vertexArrayObject1);
+        glBindVertexArray(windowContext.gl.vertexArrayObject);
         glUseProgram(windowContext.gl.program);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        glBindVertexArray(vertexArrayObject2);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // glBindVertexArray(vertexArrayObject);
+        // glDrawArrays(GL_TRIANGLES, 0, 3);
 
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
