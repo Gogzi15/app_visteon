@@ -1,0 +1,3 @@
+[submodule "thirdparty/tinyGLTF"]
+	path = thirdparty/tinyGLTF
+	url = https://github.com/syoyo/tinygltf.git
