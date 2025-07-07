@@ -1,1 +1,0 @@
- thirdparty/glfw/src/libglfw3.a C:/Users/Trainee/Desktop/app_visteon/thirdparty/pvr/Library/Windows_x86_64/libEGL.lib C:/Users/Trainee/Desktop/app_visteon/thirdparty/pvr/Library/Windows_x86_64/libGLESv2.lib -lpthread -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 
