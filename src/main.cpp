@@ -6,6 +6,7 @@
 
 struct WindowGLContext 
 {
+    GLuint indexBuffer;
     GLuint vertexArrayObject;
     GLint program;
 };
@@ -175,17 +176,41 @@ void loadMesh(WindowContext &windowContext, tinygltf::Model& model, unsigned int
     uint32_t gltfNormalByteLength = model.bufferViews[gltfBufferViewNormalIndex].byteLength;
     uint32_t gltfTexCoordByteLength = model.bufferViews[gltfBufferViewTexCoordIndex].byteLength;
 
+    GLfloat vertices[] = 
+    {
+        -0.5f, -0.5f, 0.0f,
+        0.5f, -0.5f, 0.0f,
+        -0.5f, 0.5f, 0.0f,
+        0.5f, 0.5f, 0.0f
+    };
+
+    GLushort indeces[] =
+    {
+        0, 1, 3,
+        0, 3, 2
+    };
+
     glGenBuffers(1, &vertexBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, gltfPositionByteLength, gltfBufferDataPosition + gltfPositionByteOffset, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &normalBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
-    glBufferData(GL_ARRAY_BUFFER, gltfNormalByteLength, gltfBufferDataNormal + gltfNormalByteOffset, GL_STATIC_DRAW);
+    unsigned int indexBuffer;
+    glGenBuffers(1, &indexBuffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indeces), indeces, GL_STATIC_DRAW);
 
-    glGenBuffers(1, &texCoordBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
-    glBufferData(GL_ARRAY_BUFFER, gltfTexCoordByteLength, gltfBufferDataTexCoord + gltfTexCoordByteOffset, GL_STATIC_DRAW);
+    windowContext.gl.indexBuffer = indexBuffer;
+    // glGenBuffers(1, &vertexBuffer);
+    // glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+    // glBufferData(GL_ARRAY_BUFFER, gltfPositionByteLength, gltfBufferDataPosition + gltfPositionByteOffset, GL_STATIC_DRAW);
+
+    // glGenBuffers(1, &normalBuffer);
+    // glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
+    // glBufferData(GL_ARRAY_BUFFER, gltfNormalByteLength, gltfBufferDataNormal + gltfNormalByteOffset, GL_STATIC_DRAW);
+
+    // glGenBuffers(1, &texCoordBuffer);
+    // glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
+    // glBufferData(GL_ARRAY_BUFFER, gltfTexCoordByteLength, gltfBufferDataTexCoord + gltfTexCoordByteOffset, GL_STATIC_DRAW);
 
     glGenVertexArrays(1, &windowContext.gl.vertexArrayObject);
     glBindVertexArray(windowContext.gl.vertexArrayObject);
@@ -194,15 +219,17 @@ void loadMesh(WindowContext &windowContext, tinygltf::Model& model, unsigned int
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    // glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
+    // glEnableVertexAttribArray(1);
+    // glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+    // glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
+    // glEnableVertexAttribArray(2);
+    // glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }
 
@@ -277,23 +304,23 @@ int main(void)
     // };
 
     //============== S TRI MASIVA I TRI BUFERA
-    GLfloat postitionData[] = {
-        -0.5f, -0.5f, 0.0f, // positions[0]​
-      0.5f, -0.5f, 0.0f, // positions[1]​
-        0.0f, 0.5f, 0.0f, // positions[2]​
-    };
+    // GLfloat postitionData[] = {
+    //     -0.5f, -0.5f, 0.0f, // positions[0]​
+    //   0.5f, -0.5f, 0.0f, // positions[1]​
+    //     0.0f, 0.5f, 0.0f, // positions[2]​
+    // };
 
-    GLfloat normalData[] = {
-        0.0f, 0.0f, 1.0f, // normals[0]​
-        0.0f, 0.0f, 1.0f, // normals[1]​
-        0.0f, 0.0f, 1.0f, // normals[2]​
-    };
+    // GLfloat normalData[] = {
+    //     0.0f, 0.0f, 1.0f, // normals[0]​
+    //     0.0f, 0.0f, 1.0f, // normals[1]​
+    //     0.0f, 0.0f, 1.0f, // normals[2]​
+    // };
 
-    GLfloat textData[] = {
-        0.25f, 0.25f, // texture coordinates[0]​
-        0.75f, 0.25f, // texture coordinates[1]​
-        0.5f, 0.75f // texture coordinates[2]​
-    };
+    // GLfloat textData[] = {
+    //     0.25f, 0.25f, // texture coordinates[0]​
+    //     0.75f, 0.25f, // texture coordinates[1]​
+    //     0.5f, 0.75f // texture coordinates[2]​
+    // };
 
     // ============= AKO SHTE CHETEM OT GLTF =====================
     // uint32_t gltfPostitionIndex = model.meshes[0].primitives[0].attributes["POSITION"];
@@ -404,9 +431,10 @@ int main(void)
         // glVertex2d(0.5f, 0.0f);
         // glVertex2d(0.0f, 0.5f);
         // glVertex2d(0.0f, -0.5f);
-        glBindVertexArray(windowContext.gl.vertexArrayObject);
         glUseProgram(windowContext.gl.program);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glBindVertexArray(windowContext.gl.vertexArrayObject);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, windowContext.gl.indexBuffer);
+        glDrawElements(GL_TRIANGLES, 4, GL_UNSIGNED_SHORT, nullptr);
 
         // glBindVertexArray(vertexArrayObject);
         // glDrawArrays(GL_TRIANGLES, 0, 3);
