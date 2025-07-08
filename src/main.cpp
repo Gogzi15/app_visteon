@@ -64,34 +64,77 @@ GLuint linkProgram(GLuint vertexShader, GLuint fragmentShader) {
     return program;
 }
 
-void loadShaders(WindowContext& windowContext) {
-    const char* vertexShaderSource = R"(
-        #version 300 es
-        layout (location = 0) in vec3 position; 
-        void main() {
-            gl_Position = vec4(position, 1.0);
-        }
-    )";
+void loadMateria(WindowContext& windowContext, tinygltf::Model& model, std::filesystem::path gltfDirectory, unsigned int materiaId) {
+    // const char* vertexShaderSource = R"(
+    //     #version 300 es
+    //     layout (location = 0) in vec3 position; 
+    //     void main() {
+    //         gl_Position = vec4(position, 1.0);
+    //     }
+    // )";
 
-    const char* fragmentShaderSource = R"(
-        #version 300 es
-        precision mediump float;
-        out vec4 fragcolour;
-        void main() {
-            fragcolour = vec4(0.0, 1.0, 0.0, 1.0);
-        }
-    )";
+    // const char* fragmentShaderSource = R"(
+    //     #version 300 es
+    //     precision mediump float;
+    //     out vec4 fragcolour;
+    //     void main() {
+    //         fragcolour = vec4(0.0, 1.0, 0.0, 1.0);
+    //     }
+    // )";
+    std::filesystem::path vertexShaderPath;
+    std::filesystem::path fragmentShaderPath;
+    std::string vertexShaderSource;
+    std::string fragmentShaderSource;
 
-    GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
+    auto gltfMaterialExtras = model.materials[materiaId].extras;
+    if(gltfMaterialExtras.Has("shader"))
+    {
+        auto gltfMaterialShader = gltfMaterialExtras.Get("shader");
+        if(gltfMaterialShader.Has("vertex"))
+        {
+            std::string gltfMaterialShaderVertex = gltfMaterialShader.Get("vertex").Get<std::string>();
+            vertexShaderPath = gltfDirectory / gltfMaterialShaderVertex;
+        }
+            if(gltfMaterialShader.Has("fragment"))
+
+        {
+            std::string gltfMaterialShaderFragment = gltfMaterialShader.Get("fragment").Get<std::string>();
+            fragmentShaderPath = gltfDirectory / gltfMaterialShaderFragment;
+        }
+    }
+
+    std::ifstream vertexShaderFile(vertexShaderPath);
+    if(vertexShaderFile.is_open())
+    {
+        std:: stringstream buffer;
+        buffer << vertexShaderFile.rdbuf();
+        vertexShaderSource = buffer.str();
+    }
+    std::ifstream fragmentShaderFile(fragmentShaderPath);
+    if(fragmentShaderFile.is_open())
+    {
+        std:: stringstream buffer;
+        buffer << fragmentShaderFile.rdbuf();
+        fragmentShaderSource = buffer.str();
+    }
+    
+
+    const char *vertexShaderSourceCStr = vertexShaderSource.c_str();
+    const char *fragmentShaderSourceCStr = fragmentShaderSource.c_str();
+
+
+    
+    GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSourceCStr);
     if (!vertexShader) return;
 
-    GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
+    GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSourceCStr);
     if (!fragmentShader) {
         glDeleteShader(vertexShader);
         return;
-    }
+    } 
 
     windowContext.gl.program = linkProgram(vertexShader, fragmentShader);
+
     if (!windowContext.gl.program) {
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
@@ -103,6 +146,7 @@ void loadShaders(WindowContext& windowContext) {
 
 void loadMesh(WindowContext &windowContext, tinygltf::Model& model, unsigned int meshId)
 {
+
     GLuint vertexBuffer = 0;
     GLuint normalBuffer = 0;
     GLuint texCoordBuffer = 0;
@@ -169,6 +213,9 @@ int main(void)
     WindowContext windowContext;
     GLFWwindow* window;
 
+    //std::string gltfFileName = R"(../../example/gltf/01_trisngle/export/triangle.gltf)";
+    std::string gltfFileName = R"(../example/03_shaders/export/shaders.gltf)";
+
     /* Initialize the library */
     if (!glfwInit())
         return -1;
@@ -180,7 +227,7 @@ int main(void)
     glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);    //za da izpolzva egl
 
     /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(640, 480, "Hello World", NULL, NULL);
+    window = glfwCreateWindow(640, 480, "zdravei shefe", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -190,14 +237,14 @@ int main(void)
     /* Make the window's context current ================ v build papkata trqbvashe da slojim .dll failovete za da moje build-a da gi vidi kogato loadva .lib failovete*/
     glfwMakeContextCurrent(window); //za da se raboti na tozi prozorec
 
-    std::string gltfFilename = "../example/gltf/01_triangle/export/triangle.gltf";
+    //std::string gltfFilename = "../example/gltf/01_triangle/export/triangle.gltf";
 
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
     std::string err, warn;
 
-    if(!loader.LoadASCIIFromFile(&model, &err, &warn, gltfFilename)){
-        std::cerr << "Failed to load gltf file" << gltfFilename << "/n";
+    if(!loader.LoadASCIIFromFile(&model, &err, &warn, gltfFileName)){
+        std::cerr << "Failed to load gltf file" << gltfFileName << "/n";
         std::cerr << "Error: " << err << std::endl;
         std::cerr << "Warning: " << warn << std::endl;
         return 1;
@@ -341,8 +388,10 @@ int main(void)
     // glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);    
     // glEnableVertexAttribArray(POSITION_INDEX);  
     // glVertexAttribPointer(POSITION_INDEX, 2, GL_FLOAT, GL_FALSE,  0, 0);
+    std::filesystem::path gltfPath = gltfFileName;
+    std::filesystem::path gltfDirectory = gltfPath.parent_path();
 
-    loadShaders(windowContext);
+    loadMateria(windowContext, model, gltfDirectory, 0);
 
     /* Loop until the user closes the window */
     while (!glfwWindowShouldClose(window))
