@@ -1,451 +1,421 @@
 #include <iostream>
 #include <GLFW/glfw3.h>
 #include <GLES3/gl3.h>
-
 #include "tiny_gltf.h"
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
+// Structure to store OpenGL-related objects and state for the window
 struct WindowGLContext 
 {
-    GLuint indexBuffer;
-    GLuint vertexArrayObject;
-    GLint program;
+    std::unordered_map<std::string, float> materialUniformFloats;
+    GLuint indicesCount;           // Number of indices to render
+    GLuint indexBuffer;            // OpenGL buffer object for indices
+    GLuint vertexArrayObject;      // Vertex Array Object (VAO) handle
+    GLint program;                 // Shader program handle
 };
 
+// Structure to store the window context, including OpenGL context
 struct WindowContext 
 {
-    WindowGLContext gl;
+    WindowGLContext gl;            // OpenGL context for this window
 };
 
-
+// Function to compile a shader (vertex or fragment) from source code
 GLuint compileShader(GLenum type, const char* source) {
+    // Create a new shader object of the given type
     GLuint shader = glCreateShader(type);
+    // Attach the shader source code to the shader object
     glShaderSource(shader, 1, &source, nullptr);
+    // Compile the shader source code
     glCompileShader(shader);
 
+    // Check if the shader compiled successfully
     GLint status;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
     if (status == GL_FALSE) {
+        // If compilation failed, get the error log
         GLint length;
         glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
         char* buffer = new char[length];
         glGetShaderInfoLog(shader, length, nullptr, buffer);
 
+        // Print the error log to standard error
         std::cerr << (type == GL_VERTEX_SHADER ? "Vertex" : "Fragment")
                   << " shader compilation failed:\n" << buffer << std::endl;
 
+        // Clean up and delete the shader object
         delete[] buffer;
         glDeleteShader(shader);
         return 0;
     }
 
+    // Return the compiled shader object handle
     return shader;
 }
 
+// Function to link a vertex and fragment shader into a shader program
 GLuint linkProgram(GLuint vertexShader, GLuint fragmentShader) {
+    // Create a new program object
     GLuint program = glCreateProgram();
+    // Attach the compiled vertex shader to the program
     glAttachShader(program, vertexShader);
+    // Attach the compiled fragment shader to the program
     glAttachShader(program, fragmentShader);
+    // Link the attached shaders into a complete program
     glLinkProgram(program);
 
+    // Check if the program linked successfully
     GLint status;
     glGetProgramiv(program, GL_LINK_STATUS, &status);
     if (status == GL_FALSE) {
+        // If linking failed, get the error log
         GLint length;
         glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
         char* buffer = new char[length];
         glGetProgramInfoLog(program, length, nullptr, buffer);
 
+        // Print the error log to standard error
         std::cerr << "Program linking failed:\n" << buffer << std::endl;
 
+        // Clean up and delete the program object
         delete[] buffer;
         glDeleteProgram(program);
         return 0;
     }
 
+    // Return the linked program object handle
     return program;
 }
 
-void loadMateria(WindowContext& windowContext, tinygltf::Model& model, std::filesystem::path gltfDirectory, unsigned int materiaId) {
-    // const char* vertexShaderSource = R"(
-    //     #version 300 es
-    //     layout (location = 0) in vec3 position; 
-    //     void main() {
-    //         gl_Position = vec4(position, 1.0);
-    //     }
-    // )";
+static void materialSetProperty(WindowGLContext& windowContext, std::string uniformName, float value)
+{
+    if (windowContext.materialUniformFloats.find(uniformName) != windowContext.materialUniformFloats.end())
+    {
+        windowContext.materialUniformFloats[uniformName] = value;
+    }
+}
 
-    // const char* fragmentShaderSource = R"(
-    //     #version 300 es
-    //     precision mediump float;
-    //     out vec4 fragcolour;
-    //     void main() {
-    //         fragcolour = vec4(0.0, 1.0, 0.0, 1.0);
-    //     }
-    // )";
+static void materialUpdateProperties(WindowGLContext& windowContext)
+{
+
+    for (auto& uniform : windowContext.materialUniformFloats)
+    {
+        GLint location = glGetUniformLocation(windowContext.program, uniform.first.c_str());
+        if (location != -1)
+        {
+            glUniform1f(location, uniform.second);
+        }
+        std::cout << "Uniform: " << uniform.first << " = " << uniform.second << std::endl;
+    }
+}
+
+// Function to load material (shaders) for a mesh, either from GLTF or use defaults
+void loadMateria(WindowContext& windowContext, tinygltf::Model& model, std::filesystem::path gltfDirectory, unsigned int materiaId) {
+    // Paths to vertex and fragment shader files
     std::filesystem::path vertexShaderPath;
     std::filesystem::path fragmentShaderPath;
+    // Strings to hold shader source code
     std::string vertexShaderSource;
     std::string fragmentShaderSource;
-
-    auto gltfMaterialExtras = model.materials[materiaId].extras;
-    if(gltfMaterialExtras.Has("shader"))
-    {
-        auto gltfMaterialShader = gltfMaterialExtras.Get("shader");
-        if(gltfMaterialShader.Has("vertex"))
-        {
-            std::string gltfMaterialShaderVertex = gltfMaterialShader.Get("vertex").Get<std::string>();
-            vertexShaderPath = gltfDirectory / gltfMaterialShaderVertex;
-        }
-            if(gltfMaterialShader.Has("fragment"))
-
-        {
-            std::string gltfMaterialShaderFragment = gltfMaterialShader.Get("fragment").Get<std::string>();
-            fragmentShaderPath = gltfDirectory / gltfMaterialShaderFragment;
-        }
-    }
-
-    std::ifstream vertexShaderFile(vertexShaderPath);
-    if(vertexShaderFile.is_open())
-    {
-        std:: stringstream buffer;
-        buffer << vertexShaderFile.rdbuf();
-        vertexShaderSource = buffer.str();
-    }
-    std::ifstream fragmentShaderFile(fragmentShaderPath);
-    if(fragmentShaderFile.is_open())
-    {
-        std:: stringstream buffer;
-        buffer << fragmentShaderFile.rdbuf();
-        fragmentShaderSource = buffer.str();
-    }
     
+    // Default vertex shader source code (GLSL)
+    const char* defaultVertexShaderSource = R"(
+        attribute vec2 position;
+        void main() {
+            gl_Position = vec4(position, 0.0, 1.0);
+        }
+    )";
 
+    // Default fragment shader source code (GLSL)
+    const char* defaultFragmentShaderSource = R"(
+        void main() {
+            gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+        }
+    )";
+    
+    // Check if the material exists in the GLTF file
+    if(materiaId < model.materials.size())
+    {
+        // Try to get custom shader file names from the material's extras
+        auto gltfMaterialExtras = model.materials[materiaId].extras;
+        if(gltfMaterialExtras.Has("shader"))
+        {
+            auto gltfMaterialShader = gltfMaterialExtras.Get("shader");
+            if(gltfMaterialShader.Has("vertex"))
+            {
+                // Get the vertex shader file name from the GLTF material
+                std::string gltfMaterialShaderVertex = gltfMaterialShader.Get("vertex").Get<std::string>();
+                vertexShaderPath = gltfDirectory / gltfMaterialShaderVertex;
+            }
+            if(gltfMaterialShader.Has("fragment"))
+            {
+                // Get the fragment shader file name from the GLTF material
+                std::string gltfMaterialShaderFragment = gltfMaterialShader.Get("fragment").Get<std::string>();
+                fragmentShaderPath = gltfDirectory / gltfMaterialShaderFragment;
+            }
+            if (gltfMaterialShader.Has("uniforms"))
+            {
+                auto gltfUniforms = gltfMaterialShader.Get("uniforms");
+                for (int uniformIdx = 0; uniformIdx < gltfUniforms.ArrayLen(); uniformIdx++)
+                {
+                    auto uniform = gltfUniforms.Get(uniformIdx);
+                    std::string uniformName;
+                    if (uniform.Has("name"))
+                    {
+                        uniformName = uniform.Get("name").Get<std::string>();
+                    }
+                    if (uniform.Has("type"))
+                    {
+                        std::string type = uniform.Get("type").Get<std::string>();
+                        auto uniformValue = uniform.Get("value");
+                        if(type == "Float")
+                        {
+                            double uniformValueFloat = uniformValue.Get("0").Get<double>();
+                            windowContext.gl.materialUniformFloats[uniformName] = uniformValueFloat;
+                            // Print the uniform name and value to standard output
+                            std::cout << "Uniform " << uniformName << " = " << uniformValueFloat << std::endl;
+                            
+                        }
+                    }
+                }
+            }
+        }
+        // Try to read vertex shader source code from file if path is set
+        std::ifstream vertexShaderFile(vertexShaderPath);
+        if(vertexShaderFile.is_open())
+        {
+            std::stringstream buffer;
+            buffer << vertexShaderFile.rdbuf();
+            vertexShaderSource = buffer.str();
+        }
+        // Try to read fragment shader source code from file if path is set
+        std::ifstream fragmentShaderFile(fragmentShaderPath);
+        if(fragmentShaderFile.is_open())
+        {
+            std::stringstream buffer;
+            buffer << fragmentShaderFile.rdbuf();
+            fragmentShaderSource = buffer.str();
+        }
+    }
+    else
+    {
+        // If no custom shaders, use the default shader source code
+        vertexShaderSource = defaultVertexShaderSource;
+        fragmentShaderSource = defaultFragmentShaderSource;
+    }
+
+    // Convert shader source code to C-style strings for OpenGL
     const char *vertexShaderSourceCStr = vertexShaderSource.c_str();
     const char *fragmentShaderSourceCStr = fragmentShaderSource.c_str();
 
-
-    
+    // Compile the vertex shader from source code
     GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSourceCStr);
     if (!vertexShader) return;
 
+    // Compile the fragment shader from source code
     GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSourceCStr);
     if (!fragmentShader) {
         glDeleteShader(vertexShader);
         return;
     } 
 
+    // Link the compiled shaders into a shader program
     windowContext.gl.program = linkProgram(vertexShader, fragmentShader);
 
+    // If linking failed, clean up shader objects
     if (!windowContext.gl.program) {
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
         return;
     }
 
+    // Set the current shader program for rendering
     glUseProgram(windowContext.gl.program);
 }
 
+// Function to load mesh data from a GLTF model and upload it to GPU buffers
 void loadMesh(WindowContext &windowContext, tinygltf::Model& model, unsigned int meshId)
 {
-
+    // Buffer handles for vertex, normal, and texture coordinate data
     GLuint vertexBuffer = 0;
     GLuint normalBuffer = 0;
     GLuint texCoordBuffer = 0;
 
+    // Get accessor indices for position, normal, texcoord, and indices from the mesh
     uint32_t gltfAccessorPositionIndex = model.meshes[meshId].primitives[0].attributes["POSITION"];
     uint32_t gltfAccessorNormalIndex = model.meshes[meshId].primitives[0].attributes["NORMAL"];
     uint32_t gltfAccessorTexCoordIndex = model.meshes[meshId].primitives[0].attributes["TEXCOORD_0"];
+    uint32_t gltfAccessorIndicesIndex = model.meshes[meshId].primitives[0].indices;
 
+    // Get buffer view indices for each attribute
     uint32_t gltfBufferViewPositionIndex = model.accessors[gltfAccessorPositionIndex].bufferView;
     uint32_t gltfBufferViewNormalIndex = model.accessors[gltfAccessorNormalIndex].bufferView;
     uint32_t gltfBufferViewTexCoordIndex = model.accessors[gltfAccessorTexCoordIndex].bufferView;
+    uint32_t gltfBufferIndicesIndex = model.accessors[gltfAccessorIndicesIndex].bufferView;
 
+    // Get buffer indices for each buffer view
     uint32_t gltfBufferIndexPosition = model.bufferViews[gltfBufferViewPositionIndex].buffer;
     uint32_t gltfBufferIndexNormal = model.bufferViews[gltfBufferViewNormalIndex].buffer;
     uint32_t gltfBufferIndexTexCoord = model.bufferViews[gltfBufferViewTexCoordIndex].buffer;
+    uint32_t gltfBufferIndexIndices = model.bufferViews[gltfBufferIndicesIndex].buffer;
 
+    // Get raw data pointers for each buffer
     unsigned char* gltfBufferDataPosition = model.buffers[gltfBufferIndexPosition].data.data();
     unsigned char* gltfBufferDataNormal = model.buffers[gltfBufferIndexNormal].data.data();
     unsigned char* gltfBufferDataTexCoord = model.buffers[gltfBufferIndexTexCoord].data.data();
+    unsigned char* gltfBufferDataIndices = model.buffers[gltfBufferIndexIndices].data.data();
 
+    // Get byte offsets for each buffer view
     uint32_t gltfPositionByteOffset = model.bufferViews[gltfBufferViewPositionIndex].byteOffset;
     uint32_t gltfNormalByteOffset = model.bufferViews[gltfBufferViewNormalIndex].byteOffset;
     uint32_t gltfTexCoordByteOffset = model.bufferViews[gltfBufferViewTexCoordIndex].byteOffset;
+    uint32_t gltfIndecesByteOffset = model.bufferViews[gltfBufferIndicesIndex].byteOffset;
 
+    // Get byte lengths for each buffer view
     uint32_t gltfPositionByteLength = model.bufferViews[gltfBufferViewPositionIndex].byteLength;
     uint32_t gltfNormalByteLength = model.bufferViews[gltfBufferViewNormalIndex].byteLength;
     uint32_t gltfTexCoordByteLength = model.bufferViews[gltfBufferViewTexCoordIndex].byteLength;
+    uint32_t gltfIndicesByteLength = model.bufferViews[gltfBufferIndicesIndex].byteLength;
 
-    GLfloat vertices[] = 
-    {
-        -0.5f, -0.5f, 0.0f,
-        0.5f, -0.5f, 0.0f,
-        -0.5f, 0.5f, 0.0f,
-        0.5f, 0.5f, 0.0f
-    };
+    // Calculate the number of indices to draw (for glDrawElements)
+    windowContext.gl.indicesCount = gltfPositionByteLength / sizeof(GLushort);
 
-    GLushort indeces[] =
-    {
-        0, 1, 3,
-        0, 3, 2
-    };
-
-    glGenBuffers(1, &vertexBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
+    // Create and upload index buffer to the GPU
     unsigned int indexBuffer;
     glGenBuffers(1, &indexBuffer);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indeces), indeces, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, gltfIndicesByteLength, gltfBufferDataIndices + gltfIndecesByteOffset, GL_STATIC_DRAW);
 
+    // Store the index buffer handle in the window context
     windowContext.gl.indexBuffer = indexBuffer;
-    // glGenBuffers(1, &vertexBuffer);
-    // glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-    // glBufferData(GL_ARRAY_BUFFER, gltfPositionByteLength, gltfBufferDataPosition + gltfPositionByteOffset, GL_STATIC_DRAW);
 
-    // glGenBuffers(1, &normalBuffer);
-    // glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
-    // glBufferData(GL_ARRAY_BUFFER, gltfNormalByteLength, gltfBufferDataNormal + gltfNormalByteOffset, GL_STATIC_DRAW);
+    // Create and upload vertex buffer (positions) to the GPU
+    glGenBuffers(1, &vertexBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+    glBufferData(GL_ARRAY_BUFFER, gltfPositionByteLength, gltfBufferDataPosition + gltfPositionByteOffset, GL_STATIC_DRAW);
 
-    // glGenBuffers(1, &texCoordBuffer);
-    // glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
-    // glBufferData(GL_ARRAY_BUFFER, gltfTexCoordByteLength, gltfBufferDataTexCoord + gltfTexCoordByteOffset, GL_STATIC_DRAW);
+    // Create and upload normal buffer to the GPU
+    glGenBuffers(1, &normalBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
+    glBufferData(GL_ARRAY_BUFFER, gltfNormalByteLength, gltfBufferDataNormal + gltfNormalByteOffset, GL_STATIC_DRAW);
 
+    // Create and upload texture coordinate buffer to the GPU
+    glGenBuffers(1, &texCoordBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
+    glBufferData(GL_ARRAY_BUFFER, gltfTexCoordByteLength, gltfBufferDataTexCoord + gltfTexCoordByteOffset, GL_STATIC_DRAW);
+
+    // Create and bind a Vertex Array Object (VAO) to store attribute/buffer bindings
     glGenVertexArrays(1, &windowContext.gl.vertexArrayObject);
     glBindVertexArray(windowContext.gl.vertexArrayObject);
 
+    // Bind position buffer to attribute location 0 in the VAO
     glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
+    // Bind normal buffer to attribute location 1 in the VAO
+    glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-    // glBindBuffer(GL_ARRAY_BUFFER, normalBuffer);
-    // glEnableVertexAttribArray(1);
-    // glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    // Bind texture coordinate buffer to attribute location 2 in the VAO
+    glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
-    // glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
-    // glEnableVertexAttribArray(2);
-    // glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
-
+    // Unbind buffers and VAO to avoid accidental modification
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 }
 
-
 int main(void)
 {
-
+    // Create a window context structure to hold OpenGL state
     WindowContext windowContext;
+    // Pointer to the GLFW window object
     GLFWwindow* window;
 
-    //std::string gltfFileName = R"(../../example/gltf/01_trisngle/export/triangle.gltf)";
-    std::string gltfFileName = R"(../example/03_shaders/export/shaders.gltf)";
+    // Path to the GLTF file to load (relative to the executable)
+    std::string gltfFileName = R"(../example/05_suzanne_uniforms/export/suzanne.gltf)";
 
-    /* Initialize the library */
+    // Initialize the GLFW library (for window and OpenGL context management)
     if (!glfwInit())
         return -1;
 
-    //nastroiki za opengl
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);    //izpolzvame opengl es
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);  //za versii
+    // Set OpenGL ES context version and API hints for GLFW
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);    //za da izpolzva egl
+    glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
 
-    /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(640, 480, "zdravei shefe", NULL, NULL);
+    // Create a window and associated OpenGL context
+    window = glfwCreateWindow(640, 480, "OpenGL Example", NULL, NULL);
     if (!window)
     {
+        // If window creation failed, clean up and exit
         glfwTerminate();
         return -1;
     }
 
-    /* Make the window's context current ================ v build papkata trqbvashe da slojim .dll failovete za da moje build-a da gi vidi kogato loadva .lib failovete*/
-    glfwMakeContextCurrent(window); //za da se raboti na tozi prozorec
+    // Make the OpenGL context current for this thread
+    glfwMakeContextCurrent(window);
 
-    //std::string gltfFilename = "../example/gltf/01_triangle/export/triangle.gltf";
-
+    // Create a tinygltf model object to hold the loaded GLTF data
     tinygltf::Model model;
+    // Create a tinygltf loader object to load the GLTF file
     tinygltf::TinyGLTF loader;
+    // Strings to hold error and warning messages from the loader
     std::string err, warn;
 
+    // Load the GLTF model from file (ASCII format)
     if(!loader.LoadASCIIFromFile(&model, &err, &warn, gltfFileName)){
-        std::cerr << "Failed to load gltf file" << gltfFileName << "/n";
+        // If loading failed, print error and warning messages
+        std::cerr << "Failed to load gltf file" << gltfFileName << "\n";
         std::cerr << "Error: " << err << std::endl;
         std::cerr << "Warning: " << warn << std::endl;
         return 1;
     }
 
+    // Load mesh data from the GLTF model (using mesh index 0)
+    unsigned int meshId = 0;
+    loadMesh(windowContext, model, meshId);
 
-        unsigned int meshId = 0;
-        loadMesh(windowContext, model, meshId);
-
-
-
-    // float vertex[6] = 
-    // {
-    //     0.0, 0.5,
-    //     -0.5, 0.0,
-    //     0.5, 0.0
-    // };
-
-    //============== S EDIN MASIV ==============
-    // GLfloat vertexData[] = {
-    // -0.5f, -0.5f, 0.0f, // positions[0]​
-    // 0.5f, -0.5f, 0.0f, // positions[1]​
-    // 0.0f, 0.5f, 0.0f, // positions[2]​
-    // 0.0f, 0.0f, 1.0f, // normals[0]​
-    // 0.0f, 0.0f, 1.0f, // normals[1]​
-    // 0.0f, 0.0f, 1.0f, // normals[2]​
-    // 0.25f, 0.25f, // texture coordinates[0]​
-    // 0.75f, 0.25f, // texture coordinates[1]​
-    // 0.5f, 0.75f // texture coordinates[2]​
-    // };
-
-    //============== S TRI MASIVA I TRI BUFERA
-    // GLfloat postitionData[] = {
-    //     -0.5f, -0.5f, 0.0f, // positions[0]​
-    //   0.5f, -0.5f, 0.0f, // positions[1]​
-    //     0.0f, 0.5f, 0.0f, // positions[2]​
-    // };
-
-    // GLfloat normalData[] = {
-    //     0.0f, 0.0f, 1.0f, // normals[0]​
-    //     0.0f, 0.0f, 1.0f, // normals[1]​
-    //     0.0f, 0.0f, 1.0f, // normals[2]​
-    // };
-
-    // GLfloat textData[] = {
-    //     0.25f, 0.25f, // texture coordinates[0]​
-    //     0.75f, 0.25f, // texture coordinates[1]​
-    //     0.5f, 0.75f // texture coordinates[2]​
-    // };
-
-    // ============= AKO SHTE CHETEM OT GLTF =====================
-    // uint32_t gltfPostitionIndex = model.meshes[0].primitives[0].attributes["POSITION"];
-    // uint32_t gltfBufferIndex = model.bufferViews[gltfPostitionIndex].buffer;
-    // unsigned char* gltfBufferData = model.buffers[gltfBufferIndex].data.data();
-
-    // float* verticies = (float*)gltfBufferData;
-
-    // for(int i = 0; i < 9; i++){
-    //     std::cout << verticies[i] << std::endl;
-    // }
-
-
-    // // ============== SUZDAVANE NA TRI BUFERA ===================
-    // unsigned int bufferID = 0;
-    // unsigned int buffer2ID = 0;
-    // unsigned int buffer3ID = 0;
-    // glGenBuffers(1, &bufferID); //suzdavame bufer v GPU
-    // glBindBuffer(GL_ARRAY_BUFFER, bufferID);    //definirame tipa na bufera
-    // glBufferData(GL_ARRAY_BUFFER, sizeof(postitionData), postitionData, GL_STATIC_DRAW);
-
-    // glGenBuffers(1, &buffer2ID); //suzdavame bufer v GPU; kolko bufera, promenliva za da se populni id-to
-    // glBindBuffer(GL_ARRAY_BUFFER, buffer2ID);    //definirame tipa na bufera
-    // glBufferData(GL_ARRAY_BUFFER, sizeof(normalData), normalData, GL_STATIC_DRAW);
-    
-    // glGenBuffers(1, &buffer3ID); //suzdavame bufer v GPU
-    // glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);    //definirame tipa na bufera
-    // glBufferData(GL_ARRAY_BUFFER, sizeof(textData), textData, GL_STATIC_DRAW);
-
-    // const int POSITION_INDEX = 0;
-    // const int NORMAL_INDEX = 1;
-    // const int TEXT_INDEX = 2;  
-    
-
-
-    // ======== NALGASA NA NASTROIKI S EDIN MASIV VARIANT 1 =========
-    // glEnableVertexAttribArray(POSITION_INDEX); //enable attribute 0
-    // //attribute zero[postitions], contains of three arguments/ aka shte chete tri floata na skok, the type is glfloat, misc, 
-    // //offset to the next element (8 * glfloatsize) aka the next xyz's demek kolko trqbva da preskochi do sledvashtite xyz,
-    // //where to start from
-    // glVertexAttribPointer(POSITION_INDEX, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(0 * sizeof(GLfloat))); 
-
-    // glEnableVertexAttribArray(NORMAL_INDEX);
-    // glVertexAttribPointer(NORMAL_INDEX, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
-
-    // glEnableVertexAttribArray(TEXT_INDEX);
-    // glVertexAttribPointer(TEXT_INDEX, 2, GL_FLOAT, GL_FALSE,  8 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
-    // //shte preskacha dokato ne stigne buffer overflow
-
-    // ======== NALGASA NA NASTROIKI S EDIN MASIV VARIANT 2 =========
-    // //kategorizirame veche postavenata informaciq v buferite
-    // glEnableVertexAttribArray(POSITION_INDEX);
-    // //ako slojim 0 na stride-a pak shte stane zashtoto sa edno sled drugo i opengl sam shte se opravi
-    // glVertexAttribPointer(POSITION_INDEX, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)(0 * sizeof(GLfloat))); 
-    
-    // glEnableVertexAttribArray(NORMAL_INDEX);
-    // glVertexAttribPointer(NORMAL_INDEX, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (void*)(9 * sizeof(GLfloat)));
-    
-    // glEnableVertexAttribArray(TEXT_INDEX);  //"zadai nov atribut na index 2"
-    // glVertexAttribPointer(TEXT_INDEX, 2, GL_FLOAT, GL_FALSE,  2 * sizeof(GLfloat), (void*)(18 * sizeof(GLfloat)));
-
-
-    // ========= IZPOLZVANE NA VERTEX ARRAY OBJECT ==========
-    // GLuint vertexArrayObject1 = 0;
-    // glGenVertexArrays(1, &vertexArrayObject1);
-    // glBindVertexArray(vertexArrayObject1);
-
-    // glBindBuffer(GL_ARRAY_BUFFER, bufferID); 
-    // glEnableVertexAttribArray(POSITION_INDEX);
-    // glVertexAttribPointer(POSITION_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0); 
-    
-    // glBindBuffer(GL_ARRAY_BUFFER, buffer2ID);
-    // glEnableVertexAttribArray(NORMAL_INDEX);
-    // glVertexAttribPointer(NORMAL_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    
-    // glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);
-    // glEnableVertexAttribArray(TEXT_INDEX);  
-    // glVertexAttribPointer(TEXT_INDEX, 2, GL_FLOAT, GL_FALSE,  0, 0);
-
-    // GLuint vertexArrayObject2 = 0;
-    // glGenVertexArrays(1, &vertexArrayObject2);
-    // glBindVertexArray(vertexArrayObject2);
-
-    // glBindBuffer(GL_ARRAY_BUFFER, bufferID);    
-    // glEnableVertexAttribArray(TEXT_INDEX);
-    // glVertexAttribPointer(TEXT_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0); 
-    
-    // glBindBuffer(GL_ARRAY_BUFFER, buffer2ID);    
-    // glEnableVertexAttribArray(NORMAL_INDEX);
-    // glVertexAttribPointer(NORMAL_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0);
-    
-    // glBindBuffer(GL_ARRAY_BUFFER, buffer3ID);    
-    // glEnableVertexAttribArray(POSITION_INDEX);  
-    // glVertexAttribPointer(POSITION_INDEX, 2, GL_FLOAT, GL_FALSE,  0, 0);
+    // Get the directory of the GLTF file (for loading shaders from the same folder)
     std::filesystem::path gltfPath = gltfFileName;
     std::filesystem::path gltfDirectory = gltfPath.parent_path();
 
+    // Load material (shaders) for the mesh (using material index 0)
     loadMateria(windowContext, model, gltfDirectory, 0);
 
-    /* Loop until the user closes the window */
+    // Main render loop: runs until the window is closed
     while (!glfwWindowShouldClose(window))
     {
-        /* Render here */
-        glClearColor(1.0F, 0.54F, 0.54F, 1.0F);
+        // Set the clear color to white (RGBA)
+        glClearColor(1.0F, 1.0F, 1.0F, 1.0F);
+        // Clear the color buffer (erase previous frame)
         glClear(GL_COLOR_BUFFER_BIT);
 
-        //glBegin(GL_TRIANGLES);
-        // glVertex2d(0.5f, 0.0f);
-        // glVertex2d(0.0f, 0.5f);
-        // glVertex2d(0.0f, -0.5f);
+        // Use the shader program for rendering
         glUseProgram(windowContext.gl.program);
+        // Bind the VAO (vertex array object) for the mesh
         glBindVertexArray(windowContext.gl.vertexArrayObject);
+        // Bind the index buffer for drawing
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, windowContext.gl.indexBuffer);
-        glDrawElements(GL_TRIANGLES, 4, GL_UNSIGNED_SHORT, nullptr);
 
-        // glBindVertexArray(vertexArrayObject);
-        // glDrawArrays(GL_TRIANGLES, 0, 3);
+        // Draw the mesh using the index buffer (GL_TRIANGLES mode)
+        glDrawElements(GL_TRIANGLES, windowContext.gl.indicesCount, GL_UNSIGNED_SHORT, nullptr);
 
-        /* Swap front and back buffers */
+        // Swap the front and back buffers (display the rendered image)
         glfwSwapBuffers(window);
 
-        /* Poll for and process events */
+        // Poll for window events (keyboard, mouse, etc.)
         glfwPollEvents();
     }
 
+    // Clean up and close the window and OpenGL context
     glfwTerminate();
     return 0;
-} 
+}

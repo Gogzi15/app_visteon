@@ -1,0 +1,136 @@
+{
+	"asset":{
+		"generator":"Khronos glTF Blender I/O v4.1.62",
+		"version":"2.0"
+	},
+	"scene":0,
+	"scenes":[
+		{
+			"name":"Scene",
+			"nodes":[
+				0
+			]
+		}
+	],
+	"nodes":[
+		{
+			"mesh":0,
+			"name":"Suzanne"
+		}
+	],
+	"materials":[
+		{
+			"doubleSided":true,
+			"name":"BasicShader",
+			"extras":{
+				"shader":{
+					"vertex": "shaders/BasicShader.vert.glsl",
+					"fragment": "shaders/BasicShader.frag.glsl",
+					"uniforms": [
+						{
+							"name": "time",
+							"value": [
+								0.0
+							],
+							"type": "Float"
+						},
+						{
+							"name": "baseColor",
+							"value": [
+								0.0,
+								1.0,
+								0.0,
+								1.0
+							],
+							"type": "Vector4"
+						}
+					]
+				}
+			}
+		}
+	],
+	"meshes":[
+		{
+			"name":"Suzanne",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":0,
+						"NORMAL":1,
+						"TEXCOORD_0":2
+					},
+					"indices":3,
+					"material":0
+				}
+			]
+		}
+	],
+	"accessors":[
+		{
+			"bufferView":0,
+			"componentType":5126,
+			"count":804,
+			"max":[
+				0.859375,
+				0.7578125596046448,
+				0.8515625
+			],
+			"min":[
+				-0.859375,
+				-0.9453125,
+				0.59375
+			],
+			"type":"VEC3"
+		},
+		{
+			"bufferView":1,
+			"componentType":5126,
+			"count":804,
+			"type":"VEC3"
+		},
+		{
+			"bufferView":2,
+			"componentType":5126,
+			"count":804,
+			"type":"VEC2"
+		},
+		{
+			"bufferView":3,
+			"componentType":5123,
+			"count":1182,
+			"type":"SCALAR"
+		}
+	],
+	"bufferViews":[
+		{
+			"buffer":0,
+			"byteLength":9648,
+			"byteOffset":0,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":9648,
+			"byteOffset":9648,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":6432,
+			"byteOffset":19296,
+			"target":34962
+		},
+		{
+			"buffer":0,
+			"byteLength":2364,
+			"byteOffset":25728,
+			"target":34963
+		}
+	],
+	"buffers":[
+		{
+			"byteLength":28092,
+			"uri":"buffers/suzanne.bin"
+		}
+	]
+}
