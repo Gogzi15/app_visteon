@@ -5,15 +5,25 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <chrono>
+#include <unordered_map>
+#include <string>
+#include "basic_types.hpp"
 
 // Structure to store OpenGL-related objects and state for the window
 struct WindowGLContext 
 {
     std::unordered_map<std::string, float> materialUniformFloats;
+    std::unordered_map<std::string, int> materialUniformInts; 
+    std::unordered_map<std::string, Vector3> materialUniformVector3;    
+    std::unordered_map<std::string, Vector2> materialUniformVector2;
+    std::unordered_map<std::string, Vector4> materialUniformVector4;
+
     GLuint indicesCount;           // Number of indices to render
     GLuint indexBuffer;            // OpenGL buffer object for indices
     GLuint vertexArrayObject;      // Vertex Array Object (VAO) handle
     GLint program;                 // Shader program handle
+
 };
 
 // Structure to store the window context, including OpenGL context
@@ -89,17 +99,72 @@ GLuint linkProgram(GLuint vertexShader, GLuint fragmentShader) {
     return program;
 }
 
+static float getcurrentTime()
+{
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime.time_since_epoch()).count();
+    return duration / 1000.0f; // Convert milliseconds to seconds
+}
+
+static void materialSetProperty(WindowGLContext& windowContext, std::string uniformName, int value)
+{
+    if (windowContext.materialUniformInts.find(uniformName) != windowContext.materialUniformInts.end())
+    {
+        windowContext.materialUniformInts[uniformName] = value;
+    }
+}
+
+static void materialSetProperty(WindowGLContext& windowContext, std::string uniformName, Vector2 value)
+{
+    // Check if the uniform name exists in the materialUniformVector2 map
+    // If it does, update the value; otherwise, add a new entry
+    if (windowContext.materialUniformVector2.find(uniformName) != windowContext.materialUniformVector2.end())
+    {
+        windowContext.materialUniformVector2[uniformName] = value;
+    }
+}
+static void materialSetProperty(WindowGLContext& windowContext, std::string uniformName, Vector3 value)
+{
+    // Check if the uniform name exists in the materialUniformVector3 map
+    // If it does, update the value; otherwise, add a new entry
+    if (windowContext.materialUniformVector3.find(uniformName) != windowContext.materialUniformVector3.end())
+    {
+        windowContext.materialUniformVector3[uniformName] = value;
+    }
+}
+
 static void materialSetProperty(WindowGLContext& windowContext, std::string uniformName, float value)
 {
+    // Check if the uniform name exists in the materialUniformFloats map
+    // If it does, update the value; otherwise, add a new entry
     if (windowContext.materialUniformFloats.find(uniformName) != windowContext.materialUniformFloats.end())
     {
         windowContext.materialUniformFloats[uniformName] = value;
     }
 }
 
+static void materialSetProperty(WindowGLContext& windowContext, std::string uniformName, Vector4 value)
+{
+    // Check if the uniform name exists in the materialUniformVector4 map
+    // If it does, update the value; otherwise, add a new entry
+    if (windowContext.materialUniformVector4.find(uniformName) != windowContext.materialUniformVector4.end())
+    {
+        windowContext.materialUniformVector4[uniformName] = value;
+    }
+}
+
 static void materialUpdateProperties(WindowGLContext& windowContext)
 {
-
+    for(auto& uniform : windowContext.materialUniformInts)
+    {
+        GLint location = glGetUniformLocation(windowContext.program, uniform.first.c_str());
+        if (location != -1)
+        {
+            glUniform1i(location, uniform.second);
+        }
+        std::cout << "Uniform: " << uniform.first << " = " << uniform.second << std::endl;
+    }
+    // Iterate through the material uniform floats and set them in the shader program
     for (auto& uniform : windowContext.materialUniformFloats)
     {
         GLint location = glGetUniformLocation(windowContext.program, uniform.first.c_str());
@@ -109,10 +174,45 @@ static void materialUpdateProperties(WindowGLContext& windowContext)
         }
         std::cout << "Uniform: " << uniform.first << " = " << uniform.second << std::endl;
     }
+    for (auto& uniform : windowContext.materialUniformVector4)
+    {
+        GLint location = glGetUniformLocation(windowContext.program, uniform.first.c_str());
+        if (location != -1)
+        {
+            glUniform4f(location, uniform.second.x, uniform.second.y, uniform.second.z, uniform.second.w);
+        }
+        std::cout << "Uniform: " << uniform.first << " = (" 
+                  << uniform.second.x << ", " 
+                  << uniform.second.y << ", " 
+                  << uniform.second.z << ", " 
+                  << uniform.second.w << ")" << std::endl;
+    }
+    for (auto& uniform : windowContext.materialUniformVector3)
+    {
+        GLint location = glGetUniformLocation(windowContext.program, uniform.first.c_str());
+        if (location != -1)
+        {
+            glUniform3f(location, uniform.second.x, uniform.second.y, uniform.second.z);
+        }
+        std::cout << "Uniform: " << uniform.first << " = (" 
+                  << uniform.second.x << ", " 
+                  << uniform.second.y << ", " 
+                  << uniform.second.z << ")" << std::endl;
+    }
+    for (auto& uniform : windowContext.materialUniformVector2)
+    {
+        GLint location = glGetUniformLocation(windowContext.program, uniform.first.c_str());
+        if (location != -1)
+        {
+            glUniform2f(location, uniform.second.x, uniform.second.y);
+        }
+        std::cout << "Uniform: " << uniform.first << " = (" 
+                  << uniform.second.x << ", " 
+                  << uniform.second.y << ")" << std::endl;
+    }
 }
-
 // Function to load material (shaders) for a mesh, either from GLTF or use defaults
-void loadMateria(WindowContext& windowContext, tinygltf::Model& model, std::filesystem::path gltfDirectory, unsigned int materiaId) {
+void loadMaterial(WindowContext& windowContext, tinygltf::Model& model, std::filesystem::path gltfDirectory, unsigned int materialId) {
     // Paths to vertex and fragment shader files
     std::filesystem::path vertexShaderPath;
     std::filesystem::path fragmentShaderPath;
@@ -129,17 +229,24 @@ void loadMateria(WindowContext& windowContext, tinygltf::Model& model, std::file
     )";
 
     // Default fragment shader source code (GLSL)
+    // This shader generates a simple color animation based on time
     const char* defaultFragmentShaderSource = R"(
-        void main() {
-            gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
-        }
-    )";
+    precision mediump float;
+    uniform float time;
+    void main() {
+        float r = 0.5 + 0.5 * sin(time);
+        float g = 0.5 + 0.5 * sin(time + 2.0);
+        float b = 0.5 + 0.5 * sin(time + 4.0);
+        gl_FragColor = vec4(r, g, b, 1.0);
+    }
+)";
+
     
     // Check if the material exists in the GLTF file
-    if(materiaId < model.materials.size())
+    if(materialId < model.materials.size())
     {
         // Try to get custom shader file names from the material's extras
-        auto gltfMaterialExtras = model.materials[materiaId].extras;
+        auto gltfMaterialExtras = model.materials[materialId].extras;
         if(gltfMaterialExtras.Has("shader"))
         {
             auto gltfMaterialShader = gltfMaterialExtras.Get("shader");
@@ -172,11 +279,68 @@ void loadMateria(WindowContext& windowContext, tinygltf::Model& model, std::file
                         auto uniformValue = uniform.Get("value");
                         if(type == "Float")
                         {
-                            double uniformValueFloat = uniformValue.Get("0").Get<double>();
+                            double uniformValueFloat = uniformValue.Get(0).Get<double>();
                             windowContext.gl.materialUniformFloats[uniformName] = uniformValueFloat;
                             // Print the uniform name and value to standard output
                             std::cout << "Uniform " << uniformName << " = " << uniformValueFloat << std::endl;
                             
+                        }
+                        else if(type == "Vector4")
+                        {
+                            // Assuming the value is an array of 4 floats
+                            if (uniformValue.ArrayLen() >= 4)
+                            {
+                                double x = uniformValue.Get(0).Get<double>();
+                                double y = uniformValue.Get(1).Get<double>();
+                                double z = uniformValue.Get(2).Get<double>();
+                                double w = uniformValue.Get(3).Get<double>();
+                                windowContext.gl.materialUniformVector4[uniformName] = Vector4(x, y, z, w);
+                                // Print the uniform name and value to standard output
+                                std::cout << "Uniform " << uniformName << " = (" 
+                                          << x << ", " << y << ", " 
+                                          << z << ", " << w << ")" << std::endl;
+                            }
+                        }
+                        else if(
+                            type == "Vector3")
+                        {
+                            // Assuming the value is an array of 3 floats
+                            if (uniformValue.ArrayLen() >= 3)
+                            {
+                                double x = uniformValue.Get(0).Get<double>();
+                                double y = uniformValue.Get(1).Get<double>();
+                                double z = uniformValue.Get(2).Get<double>();
+                                windowContext.gl.materialUniformVector3[uniformName] = Vector3(x, y, z);
+                                // Print the uniform name and value to standard output
+                                std::cout << "Uniform " << uniformName << " = (" 
+                                          << x << ", " << y << ", " 
+                                          << z << ")" << std::endl;
+                            }
+                        }
+                        else if(type == "Vector2")
+                        {
+                            // Assuming the value is an array of 2 floats
+                            if (uniformValue.ArrayLen() >= 2)
+                            {
+                                double x = uniformValue.Get(0).Get<double>();
+                                double y = uniformValue.Get(1).Get<double>();
+                                windowContext.gl.materialUniformVector2[uniformName] = Vector2(x, y);
+                                // Print the uniform name and value to standard output
+                                std::cout << "Uniform " << uniformName << " = (" 
+                                          << x << ", " << y << ")" << std::endl;
+                            }
+                        }
+                        // Check for integer type uniforms
+                        else if(type == "Int")
+                        {
+                            int uniformValueInt = uniformValue.Get(0).Get<int>();
+                            windowContext.gl.materialUniformInts[uniformName] = uniformValueInt;
+                            // Print the uniform name and value to standard output
+                            std::cout << "Uniform " << uniformName << " = " << uniformValueInt << std::endl;
+                        }
+                        else
+                        {
+                            std::cerr << "Unsupported uniform type: " << type << " for uniform: " << uniformName << std::endl;
                         }
                     }
                 }
@@ -205,8 +369,12 @@ void loadMateria(WindowContext& windowContext, tinygltf::Model& model, std::file
         vertexShaderSource = defaultVertexShaderSource;
         fragmentShaderSource = defaultFragmentShaderSource;
     }
+    // If no vertex shader source code was loaded, use the default
+    if (vertexShaderSource.empty()) {
+        vertexShaderSource = defaultVertexShaderSource;
+    }
 
-    // Convert shader source code to C-style strings for OpenGL
+    // Convert shader source code to    C-style strings for OpenGL
     const char *vertexShaderSourceCStr = vertexShaderSource.c_str();
     const char *fragmentShaderSourceCStr = fragmentShaderSource.c_str();
 
@@ -222,6 +390,7 @@ void loadMateria(WindowContext& windowContext, tinygltf::Model& model, std::file
     } 
 
     // Link the compiled shaders into a shader program
+
     windowContext.gl.program = linkProgram(vertexShader, fragmentShader);
 
     // If linking failed, clean up shader objects
@@ -280,7 +449,7 @@ void loadMesh(WindowContext &windowContext, tinygltf::Model& model, unsigned int
     uint32_t gltfIndicesByteLength = model.bufferViews[gltfBufferIndicesIndex].byteLength;
 
     // Calculate the number of indices to draw (for glDrawElements)
-    windowContext.gl.indicesCount = gltfPositionByteLength / sizeof(GLushort);
+    windowContext.gl.indicesCount = model.accessors[gltfAccessorIndicesIndex].count;
 
     // Create and upload index buffer to the GPU
     unsigned int indexBuffer;
@@ -323,7 +492,7 @@ void loadMesh(WindowContext &windowContext, tinygltf::Model& model, unsigned int
     // Bind texture coordinate buffer to attribute location 2 in the VAO
     glBindBuffer(GL_ARRAY_BUFFER, texCoordBuffer);
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0); // TEXCOORD_0 is usually vec2
 
     // Unbind buffers and VAO to avoid accidental modification
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -339,20 +508,19 @@ int main(void)
     GLFWwindow* window;
 
     // Path to the GLTF file to load (relative to the executable)
-    std::string gltfFileName = R"(../example/05_suzanne_uniforms/export/suzanne.gltf)";
-
+    std::string gltfFileName = R"(../example/06_shadertoy/export/shadertoy.gltf)";
     // Initialize the GLFW library (for window and OpenGL context management)
     if (!glfwInit())
         return -1;
 
-    // Set OpenGL ES context version and API hints for GLFW
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    // Set GLFW window hints for OpenGL ES context creation
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);    
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);  
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
 
     // Create a window and associated OpenGL context
-    window = glfwCreateWindow(640, 480, "OpenGL Example", NULL, NULL);
+    window = glfwCreateWindow(640, 480, "gogo", NULL, NULL);
     if (!window)
     {
         // If window creation failed, clean up and exit
@@ -373,8 +541,8 @@ int main(void)
     // Load the GLTF model from file (ASCII format)
     if(!loader.LoadASCIIFromFile(&model, &err, &warn, gltfFileName)){
         // If loading failed, print error and warning messages
-        std::cerr << "Failed to load gltf file" << gltfFileName << "\n";
-        std::cerr << "Error: " << err << std::endl;
+        std::cerr << "Failed to load gltf file" << gltfFileName << "\n";    
+        std::cerr << "Error: " << err << std::endl; 
         std::cerr << "Warning: " << warn << std::endl;
         return 1;
     }
@@ -388,7 +556,7 @@ int main(void)
     std::filesystem::path gltfDirectory = gltfPath.parent_path();
 
     // Load material (shaders) for the mesh (using material index 0)
-    loadMateria(windowContext, model, gltfDirectory, 0);
+    loadMaterial(windowContext, model, gltfDirectory, 0);
 
     // Main render loop: runs until the window is closed
     while (!glfwWindowShouldClose(window))
@@ -405,8 +573,12 @@ int main(void)
         // Bind the index buffer for drawing
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, windowContext.gl.indexBuffer);
 
+        materialSetProperty(windowContext.gl, "iTime", getcurrentTime());   // Example of setting a uniform property (time)
+        materialUpdateProperties(windowContext.gl);  // Update material properties (uniforms) before rendering
+
         // Draw the mesh using the index buffer (GL_TRIANGLES mode)
         glDrawElements(GL_TRIANGLES, windowContext.gl.indicesCount, GL_UNSIGNED_SHORT, nullptr);
+    
 
         // Swap the front and back buffers (display the rendered image)
         glfwSwapBuffers(window);
